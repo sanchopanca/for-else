@@ -1,0 +1,17 @@
+[package]
+name = "for-else"
+version = "0.1.0"
+authors = ["Aleksandr Kovalev <aleksandr@kovalev.engineer>"]
+edition = "2021"
+description = "Python-esque for-else construct for Rust"
+license = "MIT"
+keywords = ["for", "else"]
+readme = "README.md"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
