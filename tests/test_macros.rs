@@ -1,4 +1,4 @@
-use for_else::{else_, for_};
+use for_else::for_;
 
 #[test]
 fn test_if_block() {
@@ -7,10 +7,13 @@ fn test_if_block() {
         if i == 5 {
             break;
         }
-    }}
-    else_! {
+    } else {
         flag = false;
-    }
+    }}
+
+    // else_! {
+    //     flag = false;
+    // }
 
     assert!(flag);
 }
@@ -23,10 +26,9 @@ fn test_else_block() {
         } else {
             break;
         }
-    }}
-    else_! {
+    } else {
         flag = false;
-    }
+    }}
 
     assert!(flag);
 }
@@ -39,10 +41,9 @@ fn test_match_arm_statemnt() {
             5 => break,
             _ => {}
         };
-    }}
-    else_! {
+    } else {
         flag = false;
-    }
+    }}
 
     assert!(flag);
 }
@@ -59,10 +60,9 @@ fn test_match_arm_block() {
             9 => break,
             _ => {}
         };
-    }}
-    else_! {
+    } else {
         flag = false;
-    }
+    }}
 
     assert!(flag);
 }
@@ -87,10 +87,9 @@ fn test_deep() {
                 }
             }
         }
-    }}
-    else_! {
+    } else {
         flag = false;
-    }
+    }}
 
     assert!(flag);
 }
@@ -102,10 +101,9 @@ fn test_negative() {
         if i == 11 {
             break;
         }
-    }}
-    else_! {
+    } else {
         flag = true;
-    }
+    }}
 
     assert!(flag);
 }
