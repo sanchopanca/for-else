@@ -107,3 +107,33 @@ fn test_negative() {
 
     assert!(flag);
 }
+
+#[test]
+fn test_indent() {
+    let mut was_in_else_branch = false;
+    let named_expr = [1, 2, 3, 4, 5];
+    for_! { i in named_expr {
+        if i == 3 {
+            break;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(!was_in_else_branch);
+}
+
+#[test]
+fn test_indent_else() {
+    let mut was_in_else_branch = false;
+    let named_expr = [1, 2, 3, 4, 5];
+    for_! { i in named_expr {
+        if i == 8 {
+            break;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(was_in_else_branch);
+}

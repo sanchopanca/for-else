@@ -49,9 +49,10 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
+use syn::token::Brace;
 use syn::{
-    parse2, parse_macro_input, Block, Expr, ExprBlock, ExprBreak, ExprIf, ExprMatch, Pat, Result,
-    Stmt, Token,
+    parse2, parse_macro_input, Block, Expr, ExprBlock, ExprBreak, ExprIf, ExprMatch, Pat, Stmt,
+    Token,
 };
 
 struct ForLoop {
@@ -62,13 +63,24 @@ struct ForLoop {
 }
 
 impl Parse for ForLoop {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         let var = Pat::parse_single(input)?;
         input.parse::<Token![in]>()?;
-        let expr: Expr = input.parse()?;
+
+        // Collect tokens until we see a `{` (start of the loop body)
+        let mut expr_tokens = proc_macro2::TokenStream::new();
+        while !input.peek(Brace) && !input.is_empty() {
+            let tt: proc_macro2::TokenTree = input.parse()?;
+            expr_tokens.extend(std::iter::once(tt));
+        }
+
+        let expr: Expr = syn::parse2(expr_tokens)?;
+
         let body: Block = input.parse()?;
+
         input.parse::<Token![else]>()?;
         let else_block: Block = input.parse()?;
+
         Ok(ForLoop {
             var,
             expr,
