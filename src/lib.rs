@@ -67,17 +67,46 @@ impl Parse for ForLoop {
         let var = Pat::parse_single(input)?;
         input.parse::<Token![in]>()?;
 
-        // Collect tokens until we see a `{` (start of the loop body)
+        // Use a fork to try parsing different amounts of the input as the expression
+        // We'll keep extending until we can successfully parse what's left as "{ body } else { else_block }"
+        let checkpoint = input.fork();
         let mut expr_tokens = proc_macro2::TokenStream::new();
-        while !input.peek(Brace) && !input.is_empty() {
+
+        // Collect all tokens until we find a valid parse point
+        while !input.is_empty() {
+            // Check if the remaining input can be parsed as "{ body } else { else_block }"
+            let remaining = input.fork();
+            if remaining.peek(Brace) {
+                // Try to parse: Block else Block
+                let test_remaining = remaining.fork();
+                if test_remaining.parse::<Block>().is_ok()
+                    && test_remaining.peek(Token![else])
+                    && test_remaining.peek2(Brace)
+                {
+                    let _ = test_remaining.parse::<Token![else]>();
+                    if test_remaining.parse::<Block>().is_ok() {
+                        // Successfully parsed the remaining as "{ body } else { else_block }"
+                        break;
+                    }
+                }
+            }
+
+            // Add the next token to our expression
             let tt: proc_macro2::TokenTree = input.parse()?;
             expr_tokens.extend(std::iter::once(tt));
         }
 
-        let expr: Expr = syn::parse2(expr_tokens)?;
+        // Parse the expression from collected tokens
+        let expr: Expr = if expr_tokens.is_empty() {
+            return Err(syn::Error::new(
+                checkpoint.span(),
+                "expected expression after 'in'",
+            ));
+        } else {
+            syn::parse2(expr_tokens)?
+        };
 
         let body: Block = input.parse()?;
-
         input.parse::<Token![else]>()?;
         let else_block: Block = input.parse()?;
 

@@ -172,3 +172,30 @@ fn test_inline_struct_else() {
 
     assert!(was_in_else_branch);
 }
+
+#[test]
+fn test_inline_block() {
+    let mut was_in_else_branch = false;
+    for_! { i in { vec![1, 2, 3, 4, 5] }.into_iter() {
+        if i == 3 {
+            break;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(!was_in_else_branch);
+}
+
+#[test]
+fn test_inline_block_with_inline_struct_else() {
+    let mut was_in_else_branch = false;
+    for_! { i in { S {} }.iter() {
+        if i == 10 {
+            break;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+    assert!(was_in_else_branch);
+}
