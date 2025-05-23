@@ -137,3 +137,38 @@ fn test_indent_else() {
 
     assert!(was_in_else_branch);
 }
+
+struct S;
+impl S {
+    fn iter(self) -> std::vec::IntoIter<u8> {
+        vec![1, 2, 3].into_iter()
+    }
+}
+
+#[test]
+fn test_inline_struct() {
+    let mut was_in_else_branch = false;
+    for_! { i in (S {}).iter() {
+        if i == 2 {
+            break;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(!was_in_else_branch);
+}
+
+#[test]
+fn test_inline_struct_else() {
+    let mut was_in_else_branch = false;
+    for_! { i in (S {}).iter() {
+        if i == 10 {
+            break;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(was_in_else_branch);
+}
