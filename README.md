@@ -1,4 +1,7 @@
 # for-else
+[![](https://badgers.space/badge/crates.io/for-else)](https://crates.io/crates/for-else)
+[![](https://badgers.space/github/checks/sanchopanca/for-else)](https://github.com/sanchopanca/for-else/actions)
+[![](https://badgers.space/badge/%E2%80%8B/docs.rs/orange?icon=eva-book-open-outline)](https://docs.rs/for-else/latest/for_else/index.html)
 
 Python-esque for-else construct for Rust
 
