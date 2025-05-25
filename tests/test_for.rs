@@ -11,10 +11,6 @@ fn test_if_block() {
         flag = false;
     }}
 
-    // else_! {
-    //     flag = false;
-    // }
-
     assert!(flag);
 }
 
