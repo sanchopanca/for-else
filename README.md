@@ -21,7 +21,7 @@ cargo add for-else
 
 Then, use the macros in your code:
 
-```
+```rust
 use for_else::for_;
 
 // not the best way to test primality, just for demonstration
