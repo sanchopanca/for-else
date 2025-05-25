@@ -261,10 +261,48 @@ struct WhileLoop {
 
 impl Parse for WhileLoop {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let cond = input.parse()?;
-        let body = input.parse::<Block>()?;
+        // Use the same lookahead approach as for_! macro
+        let checkpoint = input.fork();
+        let mut cond_tokens = proc_macro2::TokenStream::new();
+
+        // Collect all tokens until we find a valid parse point
+        while !input.is_empty() {
+            // Check if the remaining input can be parsed as "{ body } else { else_block }"
+            let remaining = input.fork();
+            if remaining.peek(Brace) {
+                // Try to parse: Block else Block
+                let test_remaining = remaining.fork();
+                if test_remaining.parse::<Block>().is_ok()
+                    && test_remaining.peek(Token![else])
+                    && test_remaining.peek2(Brace)
+                {
+                    let _ = test_remaining.parse::<Token![else]>();
+                    if test_remaining.parse::<Block>().is_ok() {
+                        // Successfully parsed the remaining as "{ body } else { else_block }"
+                        break;
+                    }
+                }
+            }
+
+            // Add the next token to our condition expression
+            let tt: proc_macro2::TokenTree = input.parse()?;
+            cond_tokens.extend(std::iter::once(tt));
+        }
+
+        // Parse the condition from collected tokens
+        let cond: Expr = if cond_tokens.is_empty() {
+            return Err(syn::Error::new(
+                checkpoint.span(),
+                "expected condition expression",
+            ));
+        } else {
+            syn::parse2(cond_tokens)?
+        };
+
+        let body: Block = input.parse()?;
         input.parse::<Token![else]>()?;
-        let else_block = input.parse::<Block>()?;
+        let else_block: Block = input.parse()?;
+
         Ok(WhileLoop {
             cond,
             body,
