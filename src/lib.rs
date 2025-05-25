@@ -252,3 +252,45 @@ pub fn for_(input: TokenStream) -> TokenStream {
 
     expanded.into()
 }
+
+struct WhileLoop {
+    cond: Expr,
+    body: Block,
+    else_block: Block,
+}
+
+impl Parse for WhileLoop {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let cond = input.parse()?;
+        let body = input.parse::<Block>()?;
+        input.parse::<Token![else]>()?;
+        let else_block = input.parse::<Block>()?;
+        Ok(WhileLoop {
+            cond,
+            body,
+            else_block,
+        })
+    }
+}
+
+#[proc_macro]
+pub fn while_(input: TokenStream) -> TokenStream {
+    let mut input = parse_macro_input!(input as WhileLoop);
+
+    modify_breaks(&mut input.body);
+
+    let cond = input.cond;
+    let body = input.body;
+    let else_block = input.else_block;
+
+    let expanded = quote! {
+        let mut _for_else_break_occurred = false;
+        while #cond
+            #body
+        if !_for_else_break_occurred
+            #else_block
+
+    };
+
+    expanded.into()
+}
