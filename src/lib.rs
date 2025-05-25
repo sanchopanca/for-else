@@ -201,35 +201,144 @@ fn modify_breaks(body: &mut Block) {
 /// # Syntax
 ///
 /// ```ignore
-/// for_! { variable in expression {
+/// for_! { variable in iterable {
 ///     // loop body
 /// } else {
 ///     // else block
 /// }}
 /// ```
 ///
-/// # Example
+/// # Behavior
+///
+/// - The loop iterates over all elements in the iterable
+/// - If the loop completes by exhausting all elements, the `else` block is executed
+/// - If the loop exits via a `break` statement, the `else` block is **not** executed
+/// - `continue` statements work normally and do not affect the `else` block execution
+///
+/// # Examples
+///
+/// ## Prime number search
 ///
 /// ```rust
 /// use for_else::for_;
 ///
-/// # fn some_condition(i: u32) -> bool {
-/// #     true
-/// # }
-/// # fn main() {
-/// for_! { i in 0..10 {
-///     if some_condition(i) {
-///         // Some action
+/// fn is_prime(n: u32) -> bool {
+///     if n <= 1 { return false; }
+///     for i in 2..n {
+///         if n % i == 0 { return false; }
+///     }
+///     true
+/// }
+///
+/// for_! { n in 2100..=2110 {
+///     if is_prime(n) {
+///         println!("Found prime: {}", n);
 ///         break;
 ///     }
 /// } else {
-///     // This block executes if the loop never breaks
+///     println!("No prime numbers found in range");
 /// }}
-/// # }
 /// ```
 ///
-/// In the example above, if `some_condition(i)` never evaluates to `true` for any `i` in the range `0..10`,
-/// then the `else` block will be executed after the loop completes.
+/// ## Finding an element in a collection
+///
+/// ```rust
+/// use for_else::for_;
+///
+/// fn find_user(users: &[&str], target: &str) -> bool {
+///     for_! { user in users {
+///         if *user == target {
+///             println!("Found user: {}", user);
+///             return true;
+///         }
+///     } else {
+///         println!("User '{}' not found", target);
+///     }}
+///     false
+/// }
+///
+/// let users = ["alice", "bob", "charlie"];
+/// find_user(&users, "dave");  // Prints: User 'dave' not found
+/// ```
+///
+/// ## Validation with early exit
+///
+/// ```rust
+/// use for_else::for_;
+///
+/// fn validate_data(numbers: &[i32]) -> bool {
+///     for_! { &num in numbers {
+///         if num < 0 {
+///             println!("Invalid negative number found: {}", num);
+///             return false;
+///         }
+///         if num > 100 {
+///             println!("Number too large: {}", num);
+///             return false;
+///         }
+///     } else {
+///         println!("All numbers are valid");
+///         return true;
+///     }}
+///     false
+/// }
+/// ```
+///
+/// ## Working with complex expressions
+///
+/// ```rust
+/// use for_else::for_;
+///
+/// struct DataSource;
+/// impl DataSource {
+///     fn items(&self) -> impl Iterator<Item = i32> {
+///         vec![1, 2, 3, 4, 5].into_iter()
+///     }
+/// }
+///
+/// // Note: Complex expressions may need parentheses
+/// for_! { item in (DataSource {}).items() {
+///     if item > 10 {
+///         println!("Found large item: {}", item);
+///         break;
+///     }
+/// } else {
+///     println!("No large items found");
+/// }}
+/// ```
+///
+/// # Comparison with Python
+///
+/// This macro brings Python-like `for-else` behavior to Rust:
+///
+/// **Python:**
+/// ```python
+/// for item in iterable:
+///     # loop body
+///     if some_condition:
+///         break
+/// else:
+///     # executed if loop completed without break
+///     pass
+/// ```
+///
+/// **Rust with `for_!`:**
+/// ```ignore
+/// for_! { item in iterable {
+///     // loop body
+///     if some_condition {
+///         break;
+///     }
+/// } else {
+///     // executed if loop completed without break
+/// }}
+/// ```
+///
+/// # Notes
+///
+/// - The macro supports all the same iterables as standard `for` loops
+/// - Loop labels work normally for controlling nested loops
+/// - Complex expressions in the iterable position may require parentheses due to Rust's parsing rules
 #[proc_macro]
 pub fn for_(input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as ForLoop);
@@ -311,6 +420,129 @@ impl Parse for WhileLoop {
     }
 }
 
+/// The `while_!` procedural macro with enhanced loop control.
+///
+/// This macro is an extension of the standard `while` loop in Rust. It allows users to
+/// have an additional `else` block that executes if the loop completed without encountering a `break` statement.
+///
+/// # Syntax
+///
+/// ```ignore
+/// while_! { condition {
+///     // loop body
+/// } else {
+///     // else block
+/// }}
+/// ```
+///
+/// # Behavior
+///
+/// - The loop continues to execute as long as the `condition` evaluates to `true`
+/// - If the loop exits naturally (condition becomes `false`), the `else` block is executed
+/// - If the loop exits via a `break` statement, the `else` block is **not** executed
+/// - `continue` statements work normally and do not affect the `else` block execution
+///
+/// # Examples
+///
+/// ## Basic usage
+///
+/// ```rust
+/// use for_else::while_;
+///
+/// let mut count = 0;
+/// let mut found = false;
+///
+/// while_! { count < 5 {
+///     if count == 10 {  // This condition is never true
+///         found = true;
+///         break;
+///     }
+///     count += 1;
+/// } else {
+///     println!("Loop completed without finding target value");
+/// }}
+///
+/// assert!(!found);  // Loop completed naturally, else block executed
+/// ```
+///
+/// ## Search with early termination
+///
+/// ```rust
+/// use for_else::while_;
+///
+/// fn find_target(data: &[i32], target: i32) -> Option<usize> {
+///     let mut index = 0;
+///     let mut result = None;
+///     
+///     while_! { index < data.len() {
+///         if data[index] == target {
+///             result = Some(index);
+///             break;  // Found it, exit early
+///         }
+///         index += 1;
+///     } else {
+///         println!("Target {} not found in data", target);
+///     }}
+///     
+///     result
+/// }
+/// ```
+///
+/// ## Retry mechanism with timeout
+///
+/// ```rust
+/// use for_else::while_;
+/// use std::time::{Duration, Instant};
+///
+/// fn retry_operation() -> bool {
+///     let start = Instant::now();
+///     let timeout = Duration::from_secs(5);
+///     
+///     while_! { start.elapsed() < timeout {
+///         if attempt_operation() {
+///             println!("Operation succeeded!");
+///             return true;
+///         }
+///         std::thread::sleep(Duration::from_millis(100));
+///     } else {
+///         println!("Operation timed out after 5 seconds");
+///     }}
+///     
+///     false
+/// }
+///
+/// fn attempt_operation() -> bool {
+///     // Some operation that might succeed or fail
+///     false
+/// }
+/// ```
+///
+/// # Comparison with Python
+///
+/// This macro brings Python-like `while-else` behavior to Rust:
+///
+/// **Python:**
+/// ```python
+/// while condition:
+///     # loop body
+///     if some_condition:
+///         break
+/// else:
+///     # executed if loop completed without break
+///     pass
+/// ```
+///
+/// **Rust with `while_!`:**
+/// ```ignore
+/// while_! { condition {
+///     // loop body
+///     if some_condition {
+///         break;
+///     }
+/// } else {
+///     // executed if loop completed without break
+/// }}
+/// ```
 #[proc_macro]
 pub fn while_(input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as WhileLoop);
