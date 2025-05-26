@@ -226,3 +226,41 @@ fn test_for_with_labels_else() {
     }}
     assert!(was_in_else_branch);
 }
+
+#[test]
+#[allow(clippy::single_match)]
+fn test_for_with_labels_with_match() {
+    let mut was_in_else_branch = false;
+    for_! { 'outer: i in [1, 2, 3, 4, 5] {
+        match i {
+            1 => for j in [1, 2, 3, 4, 5] {
+                if i == j {
+                    break 'outer;
+                }
+            }
+            _ => (),
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+    assert!(!was_in_else_branch);
+}
+
+#[test]
+#[allow(clippy::single_match)]
+fn test_for_with_labels_with_match_else() {
+    let mut was_in_else_branch = false;
+    for_! { 'outer: i in [1, 2, 3, 4, 5] {
+        match i {
+            1 => for j in [1, 2, 3, 4, 5] {
+                if i + j < 0 {
+                    break 'outer;
+                }
+            }
+            _ => (),
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+    assert!(was_in_else_branch);
+}

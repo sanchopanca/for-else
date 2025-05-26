@@ -133,61 +133,60 @@ impl Parse for ForLoop {
     }
 }
 
-fn modify_breaks(body: &mut Block, this_is_my_loop: bool, loops_label: Option<&syn::Label>) {
+fn modify_breaks_in_block(
+    body: &mut Block,
+    this_is_my_loop: bool,
+    loops_label: Option<&syn::Label>,
+) {
     for stmt in &mut body.stmts {
-        match stmt {
-            Stmt::Expr(Expr::Break(break_expr), _) => {
-                let replacement = modify_single_break(break_expr, this_is_my_loop, loops_label);
-                if let Some(replacement) = replacement {
-                    *stmt = parse2(replacement).unwrap();
-                }
-            }
-            Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
-                modify_breaks(block, this_is_my_loop, loops_label);
-            }
-            Stmt::Expr(
-                Expr::If(ExprIf {
-                    then_branch,
-                    else_branch,
-                    ..
-                }),
-                _,
-            ) => {
-                modify_breaks(then_branch, this_is_my_loop, loops_label);
-                if let Some((_, else_block)) = else_branch {
-                    if let Expr::Block(ExprBlock { block, .. }) = &mut **else_block {
-                        modify_breaks(block, this_is_my_loop, loops_label);
-                    }
-                }
-            }
-            Stmt::Expr(Expr::Match(ExprMatch { arms, .. }), _) => {
-                for arm in arms {
-                    match &mut *arm.body {
-                        Expr::Break(break_expr) => {
-                            let replacement =
-                                modify_single_break(break_expr, this_is_my_loop, loops_label);
-                            if let Some(replacement) = replacement {
-                                arm.body = parse2(replacement).unwrap();
-                            }
-                        }
-                        Expr::Block(ExprBlock { block, .. }) => {
-                            modify_breaks(block, this_is_my_loop, loops_label)
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Stmt::Expr(Expr::ForLoop(ExprForLoop { body, .. }), _) => {
-                modify_breaks(body, false, loops_label);
-            }
-            Stmt::Expr(Expr::While(ExprWhile { body, .. }), _) => {
-                modify_breaks(body, false, loops_label);
-            }
-            Stmt::Expr(Expr::Loop(ExprLoop { body, .. }), _) => {
-                modify_breaks(body, false, loops_label);
-            }
-            _ => {}
+        if let Stmt::Expr(expr, _) = stmt {
+            modify_breaks_in_expression(expr, this_is_my_loop, loops_label);
         }
+    }
+}
+
+fn modify_breaks_in_expression(
+    expression: &mut Expr,
+    this_is_my_loop: bool,
+    loops_label: Option<&syn::Label>,
+) {
+    match expression {
+        Expr::Break(break_expr) => {
+            let replacement = modify_single_break(break_expr, this_is_my_loop, loops_label);
+            if let Some(replacement) = replacement {
+                *expression = parse2(replacement).unwrap();
+            }
+        }
+        Expr::Block(ExprBlock { block, .. }) => {
+            modify_breaks_in_block(block, this_is_my_loop, loops_label);
+        }
+        Expr::If(ExprIf {
+            then_branch,
+            else_branch,
+            ..
+        }) => {
+            modify_breaks_in_block(then_branch, this_is_my_loop, loops_label);
+            if let Some((_, else_block)) = else_branch {
+                if let Expr::Block(ExprBlock { block, .. }) = &mut **else_block {
+                    modify_breaks_in_block(block, this_is_my_loop, loops_label);
+                }
+            }
+        }
+        Expr::Match(ExprMatch { arms, .. }) => {
+            for arm in arms {
+                modify_breaks_in_expression(&mut arm.body, this_is_my_loop, loops_label);
+            }
+        }
+        Expr::ForLoop(ExprForLoop { body, .. }) => {
+            modify_breaks_in_block(body, false, loops_label);
+        }
+        Expr::While(ExprWhile { body, .. }) => {
+            modify_breaks_in_block(body, false, loops_label);
+        }
+        Expr::Loop(ExprLoop { body, .. }) => {
+            modify_breaks_in_block(body, false, loops_label);
+        }
+        _ => {}
     }
 }
 
@@ -405,7 +404,7 @@ pub fn for_(input: TokenStream) -> TokenStream {
 
     let label = input.label;
 
-    modify_breaks(&mut input.body, true, label.as_ref());
+    modify_breaks_in_block(&mut input.body, true, label.as_ref());
 
     let var = input.var;
     let expr = input.expr;
@@ -676,7 +675,7 @@ pub fn while_(input: TokenStream) -> TokenStream {
 
     let label = input.label;
 
-    modify_breaks(&mut input.body, true, label.as_ref());
+    modify_breaks_in_block(&mut input.body, true, label.as_ref());
 
     let cond = input.cond;
     let body = input.body;

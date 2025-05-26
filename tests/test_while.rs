@@ -137,3 +137,43 @@ fn test_while_block_expr_else() {
 
     assert!(was_in_else_branch);
 }
+
+#[test]
+#[allow(clippy::never_loop)]
+fn test_while_with_label_with_loop_inside() {
+    let mut was_in_else_branch = false;
+    let mut x = 0;
+    let limit = 10;
+    while_! { 'outer: x < limit {
+        loop {
+            if x == 5 {
+                break 'outer;
+            }
+            x += 1;
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(!was_in_else_branch);
+}
+
+#[test]
+#[allow(unused_labels)]
+fn test_while_with_label_with_loop_inside_else() {
+    let mut was_in_else_branch = false;
+    let mut x = 0;
+    let limit = 10;
+    while_! { 'outer: x < limit {
+        loop {
+            x += 1;
+            if x > 5 {
+                break;
+            }
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+
+    assert!(was_in_else_branch);
+}
