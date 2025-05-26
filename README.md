@@ -7,9 +7,9 @@ Python-esque for-else construct for Rust
 
 ## Overview
 
-The for-else library introduces a procedural macro, for_!, that extends the capabilities of the standard for loop in Rust.
-This enhancement allows for an else block to be added directly within the loop,
-which is executed only if the loop completes without hitting a break statement, closely mirroring Python's for-else construct.
+The for-else library introduces two procedural macros, `for_!` and `while_!`, that extend the capabilities of the standard loops in Rust.
+This enhancement allows for an else block to be added directly after the loop,
+which is executed only if the loop completes without hitting a break statement, closely mirroring Python's for-else and while-else constructs.
 
 ## Usage
 

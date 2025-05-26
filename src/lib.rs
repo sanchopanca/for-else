@@ -351,6 +351,7 @@ fn modify_single_break(
 /// ```
 ///
 /// ## Nested loops with labels
+/// Labels should be put inside the macro
 ///
 /// ```rust
 /// use for_else::for_;
@@ -530,6 +531,9 @@ impl Parse for WhileLoop {
 ///     // loop body
 /// } else {
 ///     // else block
+/// }}
+/// ```
+///
 /// # Notes
 ///
 /// - The macro supports all the same conditions as standard `while` loops
@@ -619,6 +623,7 @@ impl Parse for WhileLoop {
 /// ```
 ///
 /// ## Nested loops with labels
+/// Labels should be put inside the macro
 ///
 /// ```rust
 /// use for_else::while_;
