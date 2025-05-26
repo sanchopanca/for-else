@@ -52,7 +52,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::token::Brace;
 use syn::{
     parse2, parse_macro_input, Block, Expr, ExprBlock, ExprBreak, ExprForLoop, ExprIf, ExprLoop,
-    ExprMatch, ExprWhile, Pat, Stmt, Token,
+    ExprMatch, ExprUnsafe, ExprWhile, Pat, Stmt, Token,
 };
 
 struct ForLoop {
@@ -158,6 +158,9 @@ fn modify_breaks_in_expression(
             }
         }
         Expr::Block(ExprBlock { block, .. }) => {
+            modify_breaks_in_block(block, this_is_my_loop, loops_label);
+        }
+        Expr::Unsafe(ExprUnsafe { block, .. }) => {
             modify_breaks_in_block(block, this_is_my_loop, loops_label);
         }
         Expr::If(ExprIf {
