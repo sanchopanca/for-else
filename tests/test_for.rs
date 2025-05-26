@@ -195,3 +195,34 @@ fn test_inline_block_with_inline_struct_else() {
     }}
     assert!(was_in_else_branch);
 }
+
+#[test]
+fn test_for_with_labels() {
+    let mut was_in_else_branch = false;
+    for_! { 'outer: i in [1, 2, 3, 4, 5] {
+        for j in [1, 2, 3, 4, 5] {
+            if i == j {
+                break 'outer;
+            }
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+    assert!(!was_in_else_branch);
+}
+
+#[test]
+#[allow(unused_labels)]
+fn test_for_with_labels_else() {
+    let mut was_in_else_branch = false;
+    for_! { 'outer: i in [1, 2, 3, 4, 5] {
+        for j in [1, 2, 3, 4, 5] {
+            if i == j {
+                break;
+            }
+        }
+    } else {
+        was_in_else_branch = true;
+    }}
+    assert!(was_in_else_branch);
+}

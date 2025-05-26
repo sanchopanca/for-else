@@ -51,8 +51,8 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::token::Brace;
 use syn::{
-    parse2, parse_macro_input, Block, Expr, ExprBlock, ExprBreak, ExprIf, ExprMatch, Pat, Stmt,
-    Token,
+    parse2, parse_macro_input, Block, Expr, ExprBlock, ExprBreak, ExprForLoop, ExprIf, ExprLoop,
+    ExprMatch, ExprWhile, Pat, Stmt, Token,
 };
 
 struct ForLoop {
@@ -60,10 +60,23 @@ struct ForLoop {
     expr: Expr,
     body: Block,
     else_block: Block,
+    label: Option<syn::Label>,
 }
 
 impl Parse for ForLoop {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        // Check for optional label at the beginning
+        let label = if input.peek(syn::Lifetime) && input.peek2(Token![:]) {
+            let lifetime: syn::Lifetime = input.parse()?;
+            input.parse::<Token![:]>()?;
+            Some(syn::Label {
+                name: lifetime,
+                colon_token: Token![:](proc_macro2::Span::call_site()),
+            })
+        } else {
+            None
+        };
+
         let var = Pat::parse_single(input)?;
         input.parse::<Token![in]>()?;
 
@@ -115,36 +128,22 @@ impl Parse for ForLoop {
             expr,
             body,
             else_block,
+            label,
         })
     }
 }
 
-fn modify_breaks(body: &mut Block) {
+fn modify_breaks(body: &mut Block, this_is_my_loop: bool, loops_label: Option<&syn::Label>) {
     for stmt in &mut body.stmts {
         match stmt {
-            Stmt::Expr(Expr::Break(ExprBreak { label, .. }), _) => {
-                // we need to replace a stement with another statement, but we have two statements instead,
-                // so we put them into a block to make it a single statement
-                let replacement = if let Some(label) = label {
-                    quote! {
-                        {
-                            _for_else_break_occurred = true;
-                            break #label;
-                        }
-                    }
-                } else {
-                    quote! {
-                        {
-                            _for_else_break_occurred = true;
-                            break;
-                        }
-                    }
-                };
-
-                *stmt = parse2(replacement).unwrap();
+            Stmt::Expr(Expr::Break(break_expr), _) => {
+                let replacement = modify_single_break(break_expr, this_is_my_loop, loops_label);
+                if let Some(replacement) = replacement {
+                    *stmt = parse2(replacement).unwrap();
+                }
             }
             Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
-                modify_breaks(block);
+                modify_breaks(block, this_is_my_loop, loops_label);
             }
             Stmt::Expr(
                 Expr::If(ExprIf {
@@ -154,43 +153,78 @@ fn modify_breaks(body: &mut Block) {
                 }),
                 _,
             ) => {
-                modify_breaks(then_branch);
+                modify_breaks(then_branch, this_is_my_loop, loops_label);
                 if let Some((_, else_block)) = else_branch {
                     if let Expr::Block(ExprBlock { block, .. }) = &mut **else_block {
-                        modify_breaks(block);
+                        modify_breaks(block, this_is_my_loop, loops_label);
                     }
                 }
             }
             Stmt::Expr(Expr::Match(ExprMatch { arms, .. }), _) => {
                 for arm in arms {
                     match &mut *arm.body {
-                        Expr::Break(ExprBreak { label, .. }) => {
-                            let replacement = if let Some(label) = label {
-                                quote! {
-                                    {
-                                        _for_else_break_occurred = true;
-                                        break #label;
-                                    }
-                                }
-                            } else {
-                                quote! {
-                                    {
-                                        _for_else_break_occurred = true;
-                                        break;
-                                    }
-                                }
-                            };
-
-                            arm.body = Box::new(syn::parse2(replacement).unwrap());
+                        Expr::Break(break_expr) => {
+                            let replacement =
+                                modify_single_break(break_expr, this_is_my_loop, loops_label);
+                            if let Some(replacement) = replacement {
+                                arm.body = parse2(replacement).unwrap();
+                            }
                         }
-                        Expr::Block(ExprBlock { block, .. }) => modify_breaks(block),
+                        Expr::Block(ExprBlock { block, .. }) => {
+                            modify_breaks(block, this_is_my_loop, loops_label)
+                        }
                         _ => {}
                     }
                 }
             }
+            Stmt::Expr(Expr::ForLoop(ExprForLoop { body, .. }), _) => {
+                modify_breaks(body, false, loops_label);
+            }
+            Stmt::Expr(Expr::While(ExprWhile { body, .. }), _) => {
+                modify_breaks(body, false, loops_label);
+            }
+            Stmt::Expr(Expr::Loop(ExprLoop { body, .. }), _) => {
+                modify_breaks(body, false, loops_label);
+            }
             _ => {}
         }
     }
+}
+
+// We need to replace a stement with another statement, but we have two statements instead,
+// so we put them into a block to make it a single statement
+fn modify_single_break(
+    break_expr: &ExprBreak,
+    this_is_my_loop: bool,
+    loops_label: Option<&syn::Label>,
+) -> Option<proc_macro2::TokenStream> {
+    let replacement = if let Some(breaks_label) = &break_expr.label {
+        // We don't want to touch breaks with labels if it's not our label
+        if let Some(loops_label) = loops_label {
+            if breaks_label.ident != loops_label.name.ident {
+                return None;
+            }
+        }
+        quote! {
+            {
+                _for_else_break_occurred = true;
+                break #breaks_label;
+            }
+        }
+    } else {
+        // We don't want to touch breaks in inner loops that don't have our label
+        if !this_is_my_loop {
+            return None;
+        }
+        quote! {
+            {
+                _for_else_break_occurred = true;
+                break;
+            }
+        }
+    };
+
+    Some(replacement)
 }
 
 /// The `for_!` procedural macro with enhanced loop control.
@@ -202,6 +236,13 @@ fn modify_breaks(body: &mut Block) {
 ///
 /// ```ignore
 /// for_! { variable in iterable {
+///     // loop body
+/// } else {
+///     // else block
+/// }}
+///
+/// // With optional label:
+/// for_! { 'label: variable in iterable {
 ///     // loop body
 /// } else {
 ///     // else block
@@ -307,6 +348,25 @@ fn modify_breaks(body: &mut Block) {
 /// }}
 /// ```
 ///
+/// ## Nested loops with labels
+///
+/// ```rust
+/// use for_else::for_;
+///
+/// for_! { 'outer: i in 0..3 {
+///     for_! { j in 0..3 {
+///         if i == 1 && j == 1 {
+///             break 'outer;  // Break outer loop
+///         }
+///         println!("({}, {})", i, j);
+///     } else {
+///         println!("Inner loop {} completed", i);
+///     }}
+/// } else {
+///     println!("Both loops completed naturally");
+/// }}
+/// ```
+///
 /// # Comparison with Python
 ///
 /// This macro brings Python-like `for-else` behavior to Rust:
@@ -343,20 +403,35 @@ fn modify_breaks(body: &mut Block) {
 pub fn for_(input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as ForLoop);
 
-    modify_breaks(&mut input.body);
+    let label = input.label;
+
+    modify_breaks(&mut input.body, true, label.as_ref());
 
     let var = input.var;
     let expr = input.expr;
     let body = input.body;
     let else_block = input.else_block;
 
-    let expanded = quote! {
-        let mut _for_else_break_occurred = false;
-        for #var in #expr
-            #body
-        if !_for_else_break_occurred
-            #else_block
-
+    let expanded = if let Some(label) = label {
+        quote! {
+            {
+                let mut _for_else_break_occurred = false;
+                #label for #var in #expr
+                    #body
+                if !_for_else_break_occurred
+                    #else_block
+            }
+        }
+    } else {
+        quote! {
+            {
+                let mut _for_else_break_occurred = false;
+                for #var in #expr
+                    #body
+                if !_for_else_break_occurred
+                    #else_block
+            }
+        }
     };
 
     expanded.into()
@@ -366,10 +441,23 @@ struct WhileLoop {
     cond: Expr,
     body: Block,
     else_block: Block,
+    label: Option<syn::Label>,
 }
 
 impl Parse for WhileLoop {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        // Check for optional label at the beginning
+        let label = if input.peek(syn::Lifetime) && input.peek2(Token![:]) {
+            let lifetime: syn::Lifetime = input.parse()?;
+            input.parse::<Token![:]>()?;
+            Some(syn::Label {
+                name: lifetime,
+                colon_token: Token![:](proc_macro2::Span::call_site()),
+            })
+        } else {
+            None
+        };
+
         // Use the same lookahead approach as for_! macro
         let checkpoint = input.fork();
         let mut cond_tokens = proc_macro2::TokenStream::new();
@@ -416,6 +504,7 @@ impl Parse for WhileLoop {
             cond,
             body,
             else_block,
+            label,
         })
     }
 }
@@ -433,7 +522,17 @@ impl Parse for WhileLoop {
 /// } else {
 ///     // else block
 /// }}
-/// ```
+///
+/// // With optional label:
+/// while_! { 'label: condition {
+///     // loop body
+/// } else {
+///     // else block
+/// # Notes
+///
+/// - The macro supports all the same conditions as standard `while` loops
+/// - Loop labels work normally for controlling nested loops
+/// - Complex expressions in the condition position are fully supported
 ///
 /// # Behavior
 ///
@@ -517,6 +616,34 @@ impl Parse for WhileLoop {
 /// }
 /// ```
 ///
+/// ## Nested loops with labels
+///
+/// ```rust
+/// use for_else::while_;
+///
+/// let mut found_target = false;
+/// let mut outer_count = 0;
+///
+/// while_! { 'outer: outer_count < 5 {
+///     let mut inner_count = 0;
+///     while_! { inner_count < 5 {
+///         if outer_count == 2 && inner_count == 3 {
+///             println!("Found target at ({}, {})", outer_count, inner_count);
+///             found_target = true;
+///             break 'outer;  // Break outer loop
+///         }
+///         inner_count += 1;
+///     } else {
+///         println!("Inner loop completed for outer_count = {}", outer_count);
+///     }}
+///     outer_count += 1;
+/// } else {
+///     println!("Search completed without early termination");
+/// }}
+///
+/// assert!(found_target);
+/// ```
+///
 /// # Comparison with Python
 ///
 /// This macro brings Python-like `while-else` behavior to Rust:
@@ -547,19 +674,34 @@ impl Parse for WhileLoop {
 pub fn while_(input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as WhileLoop);
 
-    modify_breaks(&mut input.body);
+    let label = input.label;
+
+    modify_breaks(&mut input.body, true, label.as_ref());
 
     let cond = input.cond;
     let body = input.body;
     let else_block = input.else_block;
 
-    let expanded = quote! {
-        let mut _for_else_break_occurred = false;
-        while #cond
-            #body
-        if !_for_else_break_occurred
-            #else_block
-
+    let expanded = if let Some(label) = label {
+        quote! {
+            {
+                let mut _for_else_break_occurred = false;
+                #label while #cond
+                    #body
+                if !_for_else_break_occurred
+                    #else_block
+            }
+        }
+    } else {
+        quote! {
+            {
+                let mut _for_else_break_occurred = false;
+                while #cond
+                    #body
+                if !_for_else_break_occurred
+                    #else_block
+            }
+        }
     };
 
     expanded.into()
